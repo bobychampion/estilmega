@@ -1,1 +1,3 @@
+/api/cloudinary/upload  /.netlify/functions/cloudinary-upload  200
+/api/proxy  /.netlify/functions/proxy  200
 /*  /index.html  200
