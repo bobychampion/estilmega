@@ -1,4 +1,11 @@
 -- Run this in the Supabase SQL Editor (Project > SQL Editor > New query)
+-- Safe to re-run any time this file changes.
+
+-- Migration: widen photos.order from int to bigint. The client sets it to
+-- Date.now() (a millisecond timestamp, ~1.7 trillion), which overflows a
+-- 32-bit int (max ~2.1 billion) and made every photo save fail with
+-- "value ... is out of range for type integer".
+alter table if exists photos alter column "order" type bigint;
 
 create table if not exists settings (
   id text primary key default 'studio',
@@ -42,7 +49,7 @@ create table if not exists photos (
   width int,
   height int,
   aspect_ratio numeric,
-  "order" int not null default 0,
+  "order" bigint not null default 0,
   created_at timestamptz not null default now()
 );
 
