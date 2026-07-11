@@ -89,62 +89,65 @@ export async function syncFromCloud(): Promise<void> {
 
 /**
  * Saves/updates a single album in Supabase.
+ * Throws on failure so admin-facing callers can surface the error instead of
+ * silently losing data (the album would otherwise vanish on the next sync).
  */
 export async function saveAlbumToCloud(album: Album): Promise<void> {
   const { error } = await supabase.from(ALBUMS_TABLE).upsert(album);
   if (error) {
-    console.warn(`Supabase save offline: album "${album.title}" was saved locally in browser state.`, error);
-  } else {
-    console.log(`Saved album "${album.title}" to Cloud.`);
+    console.error(`Failed to save album "${album.title}" to Supabase:`, error);
+    throw new Error(`Failed to save album "${album.title}": ${error.message}`);
   }
+  console.log(`Saved album "${album.title}" to Cloud.`);
 }
 
 /**
- * Deletes an album from Supabase.
+ * Deletes an album from Supabase. Throws on failure.
  */
 export async function deleteAlbumFromCloud(id: string): Promise<void> {
   const { error } = await supabase.from(ALBUMS_TABLE).delete().eq("id", id);
   if (error) {
-    console.warn(`Supabase delete offline: album "${id}" was deleted locally.`, error);
-  } else {
-    console.log(`Deleted album "${id}" from Cloud.`);
+    console.error(`Failed to delete album "${id}" from Supabase:`, error);
+    throw new Error(`Failed to delete album: ${error.message}`);
   }
+  console.log(`Deleted album "${id}" from Cloud.`);
 }
 
 /**
- * Saves/updates a photo in Supabase.
+ * Saves/updates a photo in Supabase. Throws on failure — the file may already
+ * be on Cloudinary, but the caller needs to know the database row didn't save.
  */
 export async function savePhotoToCloud(photo: Photo): Promise<void> {
   const { error } = await supabase.from(PHOTOS_TABLE).upsert(photo);
   if (error) {
-    console.warn(`Supabase save offline: photo "${photo.id}" was saved locally.`, error);
-  } else {
-    console.log(`Saved photo "${photo.id}" to Cloud.`);
+    console.error(`Failed to save photo "${photo.id}" to Supabase:`, error);
+    throw new Error(`Failed to save photo record: ${error.message}`);
   }
+  console.log(`Saved photo "${photo.id}" to Cloud.`);
 }
 
 /**
- * Deletes a photo from Supabase.
+ * Deletes a photo from Supabase. Throws on failure.
  */
 export async function deletePhotoFromCloud(id: string): Promise<void> {
   const { error } = await supabase.from(PHOTOS_TABLE).delete().eq("id", id);
   if (error) {
-    console.warn(`Supabase delete offline: photo "${id}" was deleted locally.`, error);
-  } else {
-    console.log(`Deleted photo "${id}" from Cloud.`);
+    console.error(`Failed to delete photo "${id}" from Supabase:`, error);
+    throw new Error(`Failed to delete photo: ${error.message}`);
   }
+  console.log(`Deleted photo "${id}" from Cloud.`);
 }
 
 /**
- * Saves global studio settings to Supabase.
+ * Saves global studio settings to Supabase. Throws on failure.
  */
 export async function saveSettingsToCloud(settings: Settings): Promise<void> {
   const { error } = await supabase.from(SETTINGS_TABLE).upsert({ ...settings, id: SETTINGS_ROW_ID });
   if (error) {
-    console.warn("Supabase save offline: studio settings saved locally.", error);
-  } else {
-    console.log("Saved settings to Cloud.");
+    console.error("Failed to save settings to Supabase:", error);
+    throw new Error(`Failed to save settings: ${error.message}`);
   }
+  console.log("Saved settings to Cloud.");
 }
 
 /**

@@ -76,7 +76,7 @@ export default function AdminDashboard() {
   const [newCategory, setNewCategory] = useState("Portrait");
   const [newLocation, setNewLocation] = useState("");
   const [newEventDate, setNewEventDate] = useState("");
-  const [newCover, setNewCover] = useState("https://images.unsplash.com/photo-1452784444945-3f422708fe5e?auto=format&fit=crop&q=80&w=1200");
+  const [newCover, setNewCover] = useState("");
   const [newIsPrivate, setNewIsPrivate] = useState(false);
   const [newPassword, setNewPassword] = useState("");
 
@@ -88,6 +88,14 @@ export default function AdminDashboard() {
     return loadedAlbums[0]?.id || "";
   });
   const [uploadedFiles, setUploadedFiles] = useState<{ id: string; name: string; size: string; status: string; error?: string; url?: string }[]>([]);
+
+  // Surfaces cloud (Supabase) write/delete failures instead of letting them fail silently
+  const [cloudError, setCloudError] = useState<string | null>(null);
+  const reportCloudError = (err: unknown) => {
+    const message = err instanceof Error ? err.message : String(err);
+    setCloudError(message);
+    console.error(message);
+  };
 
   // Authenticate Admin against Supabase Auth
   const handleLogin = async (e: React.FormEvent) => {
@@ -108,7 +116,7 @@ export default function AdminDashboard() {
   };
 
   // Create Album
-  const handleCreateAlbum = (e: React.FormEvent) => {
+  const handleCreateAlbum = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newTitle) return;
 
@@ -129,13 +137,17 @@ export default function AdminDashboard() {
     const updated = [newAlbum, ...albums];
     setAlbums(updated);
     localStorage.setItem("studio_albums", JSON.stringify(updated));
-    saveAlbumToCloud(newAlbum);
+    try {
+      await saveAlbumToCloud(newAlbum);
+    } catch (err) {
+      reportCloudError(err);
+    }
     resetForm();
     setIsCreateModalOpen(false);
   };
 
   // Edit Album Details
-  const handleEditAlbum = (e: React.FormEvent) => {
+  const handleEditAlbum = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingAlbum) return;
 
@@ -160,7 +172,11 @@ export default function AdminDashboard() {
 
     setAlbums(updated);
     localStorage.setItem("studio_albums", JSON.stringify(updated));
-    saveAlbumToCloud(updatedAlbum);
+    try {
+      await saveAlbumToCloud(updatedAlbum);
+    } catch (err) {
+      reportCloudError(err);
+    }
     resetForm();
     setEditingAlbum(null);
   };
@@ -177,7 +193,7 @@ export default function AdminDashboard() {
     }
   };
 
-  const executeConfirmedAction = () => {
+  const executeConfirmedAction = async () => {
     if (!deleteConfirmTarget) return;
 
     const { type, id } = deleteConfirmTarget;
@@ -186,15 +202,19 @@ export default function AdminDashboard() {
       const updated = albums.filter((alb) => alb.id !== id);
       setAlbums(updated);
       localStorage.setItem("studio_albums", JSON.stringify(updated));
-      deleteAlbumFromCloud(id);
 
       // Clean up photos associated with this deleted album
       const albumPhotos = photos.filter((p) => p.album_id === id);
-      albumPhotos.forEach((photo) => deletePhotoFromCloud(photo.id));
-
       const remainingPhotos = photos.filter((p) => p.album_id !== id);
       setPhotos(remainingPhotos);
       localStorage.setItem("studio_photos", JSON.stringify(remainingPhotos));
+
+      try {
+        await Promise.all(albumPhotos.map((photo) => deletePhotoFromCloud(photo.id)));
+        await deleteAlbumFromCloud(id);
+      } catch (err) {
+        reportCloudError(err);
+      }
     } else if (type === "order_cancel") {
       const updated = orders.map((o) => o.id === id ? { ...o, status: "cancelled" as const } : o);
       setOrders(updated);
@@ -231,17 +251,21 @@ export default function AdminDashboard() {
     setNewCategory("Portrait");
     setNewLocation("");
     setNewEventDate("");
-    setNewCover("https://images.unsplash.com/photo-1452784444945-3f422708fe5e?auto=format&fit=crop&q=80&w=1200");
+    setNewCover("");
     setNewIsPrivate(false);
     setNewPassword("");
   };
 
   // Update Settings
-  const handleUpdateSettings = (e: React.FormEvent) => {
+  const handleUpdateSettings = async (e: React.FormEvent) => {
     e.preventDefault();
     localStorage.setItem("studio_settings", JSON.stringify(settings));
-    saveSettingsToCloud(settings);
-    alert("Studio settings saved successfully!");
+    try {
+      await saveSettingsToCloud(settings);
+      alert("Studio settings saved successfully!");
+    } catch (err) {
+      reportCloudError(err);
+    }
   };
 
   const applyWatermark = (file: File, currentSettings: Settings): Promise<File> => {
@@ -398,6 +422,9 @@ export default function AdminDashboard() {
 
       const formData = new FormData();
       formData.append("file", processedFile);
+      // Groups the upload under this album in Cloudinary (folder + tag), so
+      // media isn't just a flat, unlabeled asset dump.
+      formData.append("albumId", selectedUploadAlbumId);
 
       const response = await fetch("/api/cloudinary/upload", {
         method: "POST",
@@ -413,14 +440,6 @@ export default function AdminDashboard() {
         throw new Error(data.message || "Upload failed");
       }
 
-      // Update queue item to success
-      setUploadedFiles(prev => prev.map(item => {
-        if (item.id === queueId) {
-          return { ...item, status: "success", url: data.url };
-        }
-        return item;
-      }));
-
       // Create new Photo record
       const newPhotoObj: Photo = {
         id: `photo-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
@@ -435,27 +454,42 @@ export default function AdminDashboard() {
         created_at: new Date().toISOString()
       };
 
-      // Add to state and save to local storage and Cloud
+      // Photo is on Cloudinary now — persist the DB row before declaring success,
+      // so a failed cloud save is visible instead of silently vanishing on reload.
+      await savePhotoToCloud(newPhotoObj);
+
       const savedPhotosStr = localStorage.getItem("studio_photos");
       const currentPhotos = savedPhotosStr ? JSON.parse(savedPhotosStr) : mockPhotos;
       const updatedPhotos = [newPhotoObj, ...currentPhotos];
       localStorage.setItem("studio_photos", JSON.stringify(updatedPhotos));
       setPhotos(updatedPhotos);
-      savePhotoToCloud(newPhotoObj);
 
-      // Increment album count and save updated album to Cloud
-      const updatedAlbums = albums.map(alb => {
-        if (alb.id === selectedUploadAlbumId) {
-          const currentCount = alb.photo_count || 0;
-          const updatedAlb = { ...alb, photo_count: currentCount + 1 };
-          saveAlbumToCloud(updatedAlb);
-          return updatedAlb;
+      setUploadedFiles(prev => prev.map(item => {
+        if (item.id === queueId) {
+          return { ...item, status: "success", url: data.url };
         }
-        return alb;
-      });
-      setAlbums(updatedAlbums);
-      localStorage.setItem("studio_albums", JSON.stringify(updatedAlbums));
+        return item;
+      }));
 
+      // Increment album count, and auto-fill the cover image the first time
+      // an album gets a real photo (instead of leaving the create-time placeholder).
+      const targetAlbum = albums.find(alb => alb.id === selectedUploadAlbumId);
+      if (targetAlbum) {
+        const updatedAlb: Album = {
+          ...targetAlbum,
+          photo_count: (targetAlbum.photo_count || 0) + 1,
+          cover_image: targetAlbum.cover_image ? targetAlbum.cover_image : newPhotoObj.url
+        };
+        const updatedAlbums = albums.map(alb => alb.id === selectedUploadAlbumId ? updatedAlb : alb);
+        setAlbums(updatedAlbums);
+        localStorage.setItem("studio_albums", JSON.stringify(updatedAlbums));
+        try {
+          await saveAlbumToCloud(updatedAlb);
+        } catch (err) {
+          // Non-fatal: the photo itself saved fine, just note the album metadata didn't sync.
+          reportCloudError(err);
+        }
+      }
     } catch (err: any) {
       console.error("Cloudinary Upload error:", err);
       setUploadedFiles(prev => prev.map(item => {
@@ -486,6 +520,51 @@ export default function AdminDashboard() {
       files.forEach(file => {
         uploadFileToCloudinary(file);
       });
+    }
+  };
+
+  // Lets the admin pick which uploaded photo is used as the album's hero/thumbnail image
+  const handleSetAlbumCover = async (albumId: string, photoUrl: string) => {
+    const targetAlbum = albums.find(alb => alb.id === albumId);
+    if (!targetAlbum) return;
+
+    const updatedAlb: Album = { ...targetAlbum, cover_image: photoUrl };
+    const updatedAlbums = albums.map(alb => alb.id === albumId ? updatedAlb : alb);
+    setAlbums(updatedAlbums);
+    localStorage.setItem("studio_albums", JSON.stringify(updatedAlbums));
+    try {
+      await saveAlbumToCloud(updatedAlb);
+    } catch (err) {
+      reportCloudError(err);
+    }
+  };
+
+  // Removes a single photo from an album (photo stays on Cloudinary, only the DB record is removed)
+  const handleDeletePhoto = async (photo: Photo) => {
+    const remainingPhotos = photos.filter(p => p.id !== photo.id);
+    setPhotos(remainingPhotos);
+    localStorage.setItem("studio_photos", JSON.stringify(remainingPhotos));
+    try {
+      await deletePhotoFromCloud(photo.id);
+    } catch (err) {
+      reportCloudError(err);
+    }
+
+    const targetAlbum = albums.find(alb => alb.id === photo.album_id);
+    if (targetAlbum) {
+      const updatedAlb: Album = {
+        ...targetAlbum,
+        photo_count: Math.max(0, (targetAlbum.photo_count || 1) - 1),
+        cover_image: targetAlbum.cover_image === photo.url ? "" : targetAlbum.cover_image
+      };
+      const updatedAlbums = albums.map(alb => alb.id === photo.album_id ? updatedAlb : alb);
+      setAlbums(updatedAlbums);
+      localStorage.setItem("studio_albums", JSON.stringify(updatedAlbums));
+      try {
+        await saveAlbumToCloud(updatedAlb);
+      } catch (err) {
+        reportCloudError(err);
+      }
     }
   };
 
@@ -629,6 +708,24 @@ export default function AdminDashboard() {
               </div>
             </div>
 
+            {/* Cloud sync error banner: surfaces Supabase write/delete failures instead of silently losing data */}
+            {cloudError && (
+              <div className="mt-6 flex items-start gap-3 rounded-2xl border border-rose-200 bg-rose-50 px-5 py-4 text-rose-700">
+                <AlertCircle className="h-4 w-4 shrink-0 mt-0.5" />
+                <div className="flex-1 text-xs leading-relaxed">
+                  <p className="font-semibold uppercase tracking-wider text-[10px] mb-1">Cloud sync failed</p>
+                  <p>{cloudError}</p>
+                </div>
+                <button
+                  onClick={() => setCloudError(null)}
+                  className="text-rose-400 hover:text-rose-600"
+                  aria-label="Dismiss"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
+            )}
+
             {/* TAB CONTENT AREAS */}
             <div className="py-10">
               <AnimatePresence mode="wait">
@@ -666,11 +763,18 @@ export default function AdminDashboard() {
                         >
                           <div className="space-y-3">
                             <div className="aspect-[4/3] rounded-xl overflow-hidden bg-zinc-950 relative border border-white/5">
-                              <img
-                                src={alb.cover_image}
-                                alt={alb.title}
-                                className="h-full w-full object-cover"
-                              />
+                              {alb.cover_image ? (
+                                <img
+                                  src={alb.cover_image}
+                                  alt={alb.title}
+                                  className="h-full w-full object-cover"
+                                />
+                              ) : (
+                                <div className="h-full w-full flex flex-col items-center justify-center gap-2 text-zinc-600">
+                                  <ImageIcon className="h-8 w-8" />
+                                  <span className="text-[9px] font-mono tracking-widest uppercase">No cover yet</span>
+                                </div>
+                              )}
                               {alb.is_private && (
                                 <div className="absolute top-3 right-3 bg-black/70 backdrop-blur-md border border-white/10 px-2.5 py-1 rounded-full text-white text-[9px] font-mono tracking-wider flex items-center gap-1.5">
                                   <Lock className="h-3 w-3 text-[#C5A059]" />
@@ -800,11 +904,12 @@ export default function AdminDashboard() {
                             </div>
 
                             <div>
-                              <label className="block text-[9px] font-mono tracking-[0.2em] uppercase text-[#C5A059] mb-2 font-semibold">Cover Image URL</label>
+                              <label className="block text-[9px] font-mono tracking-[0.2em] uppercase text-[#C5A059] mb-2 font-semibold">Cover Image URL (optional)</label>
                               <input
                                 type="url"
                                 value={newCover}
                                 onChange={(e) => setNewCover(e.target.value)}
+                                placeholder="Leave blank to auto-use the first photo you upload"
                                 className="w-full rounded-full border border-white/10 bg-black/40 px-5 py-3 text-xs outline-none text-white focus:border-[#C5A059] font-mono text-[10px]"
                               />
                             </div>
@@ -968,6 +1073,65 @@ export default function AdminDashboard() {
                             </div>
                           ))}
                         </div>
+                      </div>
+                    )}
+
+                    {/* Photos already in the selected album — manage cover image / remove */}
+                    {selectedUploadAlbumId && (
+                      <div className="space-y-3 pt-4 glass-card p-6 rounded-2xl">
+                        {(() => {
+                          const albumPhotos = photos.filter(p => p.album_id === selectedUploadAlbumId);
+                          const currentAlbum = albums.find(a => a.id === selectedUploadAlbumId);
+                          return (
+                            <>
+                              <h3 className="text-[10px] font-mono tracking-widest uppercase text-[#C5A059] font-semibold">
+                                Photos in this Album ({albumPhotos.length})
+                              </h3>
+                              {albumPhotos.length === 0 ? (
+                                <p className="text-[11px] text-zinc-500 font-light italic">No photos uploaded to this album yet.</p>
+                              ) : (
+                                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
+                                  {albumPhotos.map((photo) => {
+                                    const isCover = currentAlbum?.cover_image === photo.url;
+                                    return (
+                                      <div key={photo.id} className="group relative aspect-square rounded-xl overflow-hidden border border-white/10 bg-zinc-950">
+                                        <img
+                                          src={photo.thumbnail_url || photo.url}
+                                          alt={photo.filename}
+                                          className="h-full w-full object-cover"
+                                        />
+                                        {isCover && (
+                                          <span className="absolute top-1.5 left-1.5 bg-[#C5A059] text-black text-[8px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full">
+                                            Cover
+                                          </span>
+                                        )}
+                                        <div className="absolute inset-0 bg-black/70 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col items-center justify-center gap-1.5 p-2">
+                                          {!isCover && (
+                                            <button
+                                              type="button"
+                                              onClick={() => handleSetAlbumCover(selectedUploadAlbumId, photo.url)}
+                                              className="w-full text-[8px] font-bold uppercase tracking-wider bg-white/10 hover:bg-[#C5A059] hover:text-black text-white px-2 py-1.5 rounded-full transition-colors"
+                                            >
+                                              Set as Cover
+                                            </button>
+                                          )}
+                                          <button
+                                            type="button"
+                                            onClick={() => handleDeletePhoto(photo)}
+                                            className="w-full text-[8px] font-bold uppercase tracking-wider bg-white/10 hover:bg-rose-600 text-white px-2 py-1.5 rounded-full transition-colors flex items-center justify-center gap-1"
+                                          >
+                                            <Trash2 className="h-3 w-3" />
+                                            Remove
+                                          </button>
+                                        </div>
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+                              )}
+                            </>
+                          );
+                        })()}
                       </div>
                     )}
                   </motion.div>

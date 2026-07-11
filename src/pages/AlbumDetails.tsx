@@ -9,6 +9,7 @@ import {
 import { motion, AnimatePresence } from "motion/react";
 import { mockAlbums, mockPhotos } from "../mockData";
 import { Album, Photo } from "../types";
+import { ALBUM_PLACEHOLDER_IMAGE } from "../constants";
 import PhotobookBuilder from "../components/PhotobookBuilder";
 
 export default function AlbumDetails() {
@@ -584,7 +585,7 @@ export default function AlbumDetails() {
           {/* Dynamic Hero Cover Header Section */}
           <section className="relative h-[65vh] sm:h-[75vh] w-full overflow-hidden bg-zinc-950" id="hero-banner">
             <img
-              src={album.cover_image}
+              src={album.cover_image || ALBUM_PLACEHOLDER_IMAGE}
               alt={album.title}
               className="h-full w-full object-cover opacity-80"
               referrerPolicy="no-referrer"
@@ -664,16 +665,18 @@ export default function AlbumDetails() {
                 </button>
 
                 {/* Direct High-res Album Download */}
-                <a
-                  href={album.cover_image}
-                  download={`${album.title}-cover.jpg`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="p-2.5 rounded-full bg-zinc-50 border border-zinc-100 text-zinc-600 hover:text-zinc-900 hover:bg-zinc-100 transition-all"
-                  title="Download Cover Photograph"
-                >
-                  <Download className="h-4 w-4" />
-                </a>
+                {album.cover_image && (
+                  <a
+                    href={album.cover_image}
+                    download={`${album.title}-cover.jpg`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="p-2.5 rounded-full bg-zinc-50 border border-zinc-100 text-zinc-600 hover:text-zinc-900 hover:bg-zinc-100 transition-all"
+                    title="Download Cover Photograph"
+                  >
+                    <Download className="h-4 w-4" />
+                  </a>
+                )}
 
                 {/* Download Full Album ZIP Button */}
                 <button

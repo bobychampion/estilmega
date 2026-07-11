@@ -20,11 +20,16 @@ export default async (req: Request) => {
       return new Response(JSON.stringify({ success: false, message: "No file uploaded" }), { status: 400 });
     }
 
+    // Groups uploads by album (folder + tag) instead of dumping everything into one bucket
+    const rawAlbumId = formData.get("albumId");
+    const albumId = typeof rawAlbumId === "string" ? rawAlbumId.replace(/[^a-zA-Z0-9_-]/g, "") : "";
+    const folder = albumId ? `estil_mega_studio/${albumId}` : "estil_mega_studio";
+
     const buffer = Buffer.from(await file.arrayBuffer());
 
     const result = await new Promise<any>((resolve, reject) => {
       const uploadStream = cloudinary.uploader.upload_stream(
-        { folder: "estil_mega_studio", resource_type: "auto" },
+        { folder, resource_type: "auto", tags: albumId ? [albumId] : undefined },
         (error, result) => (error ? reject(error) : resolve(result))
       );
       uploadStream.end(buffer);

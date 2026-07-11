@@ -89,11 +89,17 @@ async function startServer() {
 
       const cloudinary = await getCloudinary();
 
+      // Groups uploads by album (folder + tag) instead of dumping everything into one bucket
+      const rawAlbumId = req.body?.albumId;
+      const albumId = typeof rawAlbumId === "string" ? rawAlbumId.replace(/[^a-zA-Z0-9_-]/g, "") : "";
+      const folder = albumId ? `estil_mega_studio/${albumId}` : "estil_mega_studio";
+
       // Upload the buffer to Cloudinary using upload_stream
       const uploadStream = cloudinary.uploader.upload_stream(
         {
-          folder: "estil_mega_studio",
+          folder,
           resource_type: "auto",
+          tags: albumId ? [albumId] : undefined,
         },
         (error: any, result: any) => {
           if (error) {

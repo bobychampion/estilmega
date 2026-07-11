@@ -4,6 +4,7 @@ import { Lock, Image, MapPin, Calendar, Camera } from "lucide-react";
 import { motion } from "motion/react";
 import { mockAlbums } from "../mockData";
 import { Category, Album } from "../types";
+import { ALBUM_PLACEHOLDER_IMAGE } from "../constants";
 
 export default function Albums() {
   const [albums] = useState<Album[]>(() => {
@@ -88,7 +89,7 @@ export default function Albums() {
               >
                 <Link to={`/albums/${album.id}`} className="block relative aspect-[16/10] overflow-hidden bg-zinc-100">
                   <img
-                    src={album.cover_image}
+                    src={album.cover_image || ALBUM_PLACEHOLDER_IMAGE}
                     alt={album.title}
                     className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-[1.02]"
                     referrerPolicy="no-referrer"

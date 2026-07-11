@@ -4,6 +4,7 @@ import { Search, MapPin, Calendar, Camera, Lock, Mail, Phone } from "lucide-reac
 import { motion } from "motion/react";
 import { mockAlbums, mockSettings } from "../mockData";
 import { Category, Album, Settings } from "../types";
+import { ALBUM_PLACEHOLDER_IMAGE } from "../constants";
 
 export default function Home() {
   const [albums] = useState<Album[]>(() => {
@@ -155,7 +156,7 @@ export default function Home() {
                   className="block overflow-hidden bg-zinc-100 aspect-[4/3] relative"
                 >
                   <img
-                    src={album.cover_image}
+                    src={album.cover_image || ALBUM_PLACEHOLDER_IMAGE}
                     alt={album.title}
                     className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-[1.03]"
                     referrerPolicy="no-referrer"
