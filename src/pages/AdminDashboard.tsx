@@ -431,11 +431,15 @@ export default function AdminDashboard() {
         body: formData
       });
 
+      const data = await response.json().catch(() => null);
+
       if (!response.ok) {
-        throw new Error(`Upload server error: ${response.statusText}`);
+        throw new Error(`Upload server error: ${data?.message || response.statusText || response.status}`);
       }
 
-      const data = await response.json();
+      if (!data) {
+        throw new Error("Upload server error: invalid response");
+      }
       if (!data.success) {
         throw new Error(data.message || "Upload failed");
       }
