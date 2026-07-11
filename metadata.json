@@ -1,0 +1,6 @@
+{
+  "name": "Estil Studio",
+  "description": "An elegant, modern photography portfolio and gallery application designed for professional photography studios, featuring secure client albums and an admin dashboard.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

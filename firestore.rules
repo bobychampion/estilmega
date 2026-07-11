@@ -1,0 +1,84 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // Default catch-all: deny all
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Helper functions for validating entities
+    function isValidId(id) {
+      return id is string && id.size() <= 128;
+    }
+
+    function isValidSettings(data) {
+      return data.keys().hasAll(['id', 'studio_name', 'theme'])
+        && data.id is string
+        && data.studio_name is string
+        && data.studio_name.size() <= 200;
+    }
+
+    function isValidAlbum(data) {
+      return data.keys().hasAll(['id', 'title', 'cover_image', 'category', 'is_private', 'created_at'])
+        && data.id is string
+        && data.title is string
+        && data.title.size() <= 200
+        && data.cover_image is string
+        && data.category is string
+        && data.is_private is bool
+        && data.created_at is string;
+    }
+
+    function isValidPhoto(data) {
+      return data.keys().hasAll(['id', 'album_id', 'url', 'thumbnail_url', 'filename', 'order', 'created_at'])
+        && data.id is string
+        && data.album_id is string
+        && data.url is string
+        && data.thumbnail_url is string
+        && data.filename is string
+        && data.order is int
+        && data.created_at is string;
+    }
+
+    function isValidOrder(data) {
+      return data.keys().hasAll(['id', 'album_id', 'album_title', 'client_name', 'client_email', 'cover_title', 'layout_style', 'book_size', 'total_price', 'payment_method', 'payment_reference', 'payment_sender_name', 'status', 'created_at'])
+        && data.id is string
+        && data.album_id is string
+        && data.client_name is string
+        && data.client_name.size() <= 200
+        && data.client_email is string
+        && data.total_price is number
+        && data.status is string
+        && data.created_at is string;
+    }
+
+    // Settings rules: Anyone can read, anyone can write validated settings
+    match /settings/{docId} {
+      allow read: if true;
+      allow create, update: if isValidId(docId) && isValidSettings(request.resource.data);
+      allow delete: if false;
+    }
+
+    // Albums rules: Anyone can read, anyone can write validated albums
+    match /albums/{albumId} {
+      allow read: if true;
+      allow create, update: if isValidId(albumId) && isValidAlbum(request.resource.data);
+      allow delete: if true;
+    }
+
+    // Photos rules: Anyone can read, anyone can write validated photos
+    match /photos/{photoId} {
+      allow read: if true;
+      allow create, update: if isValidId(photoId) && isValidPhoto(request.resource.data);
+      allow delete: if true;
+    }
+
+    // Orders rules: Anyone can read/write validated orders
+    match /orders/{orderId} {
+      allow read: if true;
+      allow create, update: if isValidId(orderId) && isValidOrder(request.resource.data);
+      allow delete: if true;
+    }
+  }
+}
