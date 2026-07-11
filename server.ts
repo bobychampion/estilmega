@@ -5,8 +5,8 @@ import { createServer as createViteServer } from "vite";
 import dotenv from "dotenv";
 import multer from "multer";
 
-// Load environment variables
-dotenv.config();
+// Load environment variables (project convention is .env.local, see .env.example)
+dotenv.config({ path: [".env.local", ".env"] });
 
 // Sanitize CLOUDINARY_URL to prevent library from throwing if it is invalid or empty
 if (process.env.CLOUDINARY_URL && !process.env.CLOUDINARY_URL.startsWith("cloudinary://")) {

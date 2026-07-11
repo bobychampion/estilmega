@@ -15,6 +15,11 @@ View your app in AI Studio: https://ai.studio/apps/40107566-f90e-4132-b72e-c6148
 
 1. Install dependencies:
    `npm install`
-2. Set the `GEMINI_API_KEY` in [.env.local](.env.local) to your Gemini API key
-3. Run the app:
+2. Copy [.env.example](.env.example) to `.env.local` and fill in:
+   - `GEMINI_API_KEY` — your Gemini API key
+   - `CLOUDINARY_*` — from Cloudinary dashboard (used server-side for image uploads)
+   - `VITE_SUPABASE_URL` / `VITE_SUPABASE_ANON_KEY` — from Supabase Project Settings > API
+3. Run the Supabase schema once against your project (Supabase Dashboard > SQL Editor):
+   [supabase/schema.sql](supabase/schema.sql)
+4. Run the app:
    `npm run dev`

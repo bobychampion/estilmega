@@ -15,7 +15,7 @@ import Contact from "./pages/Contact";
 import AdminDashboard from "./pages/AdminDashboard";
 import NotFound from "./pages/NotFound";
 import { mockSettings, mockAlbums, mockPhotos } from "./mockData";
-import { syncFromFirestore, testConnection } from "./dbSync";
+import { syncFromCloud, testConnection } from "./dbSync";
 import { Loader2 } from "lucide-react";
 
 // Component to scroll viewport to top on path changes
@@ -36,8 +36,8 @@ export default function App() {
     async function initializeApp() {
       // Test the Cloud connection
       await testConnection();
-      // Sync all data from Firestore to client-side localStorage
-      await syncFromFirestore();
+      // Sync all data from Supabase to client-side localStorage
+      await syncFromCloud();
       setIsReady(true);
     }
     initializeApp();

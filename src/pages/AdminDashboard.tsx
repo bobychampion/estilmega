@@ -1,26 +1,39 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
 import { Plus, Trash2, Edit3, Settings as SettingsIcon, Image as ImageIcon, UploadCloud, Lock, Unlock, LogOut, Check, ArrowRight, Library, Layout, Sparkles, FolderPlus, Loader2, AlertCircle, BookOpen, CreditCard, CheckCircle, Info, X } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import { mockAlbums, mockSettings, mockPhotos } from "../mockData";
 import { Album, Settings, Photo, PhotobookOrder } from "../types";
-import { 
-  saveAlbumToCloud, 
-  deleteAlbumFromCloud, 
-  savePhotoToCloud, 
-  deletePhotoFromCloud, 
-  saveSettingsToCloud, 
-  saveOrderToCloud, 
-  deleteOrderFromCloud 
+import { supabase } from "../supabase";
+import {
+  saveAlbumToCloud,
+  deleteAlbumFromCloud,
+  savePhotoToCloud,
+  deletePhotoFromCloud,
+  saveSettingsToCloud,
+  saveOrderToCloud,
+  deleteOrderFromCloud
 } from "../dbSync";
 
 export default function AdminDashboard() {
-  // Authentication State
-  const [isLoggedIn, setIsLoggedIn] = useState(() => {
-    return localStorage.getItem("admin_logged_in") === "true";
-  });
-  const [passcode, setPasscode] = useState("");
+  // Authentication State (backed by Supabase Auth, not a hardcoded passcode)
+  const [isLoggedIn, setIsLoggedIn] = useState(false);
+  const [authChecked, setAuthChecked] = useState(false);
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
   const [loginError, setLoginError] = useState("");
+  const [isLoggingIn, setIsLoggingIn] = useState(false);
+
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data }) => {
+      setIsLoggedIn(!!data.session);
+      setAuthChecked(true);
+    });
+    const { data: subscription } = supabase.auth.onAuthStateChange((_event, session) => {
+      setIsLoggedIn(!!session);
+    });
+    return () => subscription.subscription.unsubscribe();
+  }, []);
 
   // Dashboard Navigation State
   const [activeTab, setActiveTab] = useState<"albums" | "upload" | "orders" | "settings">("albums");
@@ -76,21 +89,22 @@ export default function AdminDashboard() {
   });
   const [uploadedFiles, setUploadedFiles] = useState<{ id: string; name: string; size: string; status: string; error?: string; url?: string }[]>([]);
 
-  // Authenticate Admin
-  const handleLogin = (e: React.FormEvent) => {
+  // Authenticate Admin against Supabase Auth
+  const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (passcode === "admin") {
-      setIsLoggedIn(true);
-      localStorage.setItem("admin_logged_in", "true");
-      setLoginError("");
-    } else {
+    setIsLoggingIn(true);
+    setLoginError("");
+    const { error } = await supabase.auth.signInWithPassword({ email, password });
+    setIsLoggingIn(false);
+    if (error) {
       setLoginError("Invalid admin credentials.");
+      return;
     }
+    setPassword("");
   };
 
-  const handleLogout = () => {
-    setIsLoggedIn(false);
-    localStorage.removeItem("admin_logged_in");
+  const handleLogout = async () => {
+    await supabase.auth.signOut();
   };
 
   // Create Album
@@ -478,8 +492,11 @@ export default function AdminDashboard() {
   return (
     <div className="min-h-screen bg-white text-zinc-900" id="admin-dashboard-page">
       <AnimatePresence mode="wait">
-        {/* LOGIN GATE SCREEN */}
-        {!isLoggedIn ? (
+        {!authChecked ? (
+          <div className="flex min-h-[90vh] items-center justify-center">
+            <Loader2 className="h-6 w-6 animate-spin text-zinc-400" />
+          </div>
+        ) : !isLoggedIn ? (
           <motion.div
             key="login-gate"
             initial={{ opacity: 0, y: 10 }}
@@ -495,18 +512,28 @@ export default function AdminDashboard() {
                 </div>
                 <h1 className="text-xl font-bold tracking-wider uppercase text-zinc-900">Studio Admin Auth</h1>
                 <p className="text-xs text-zinc-500 font-light leading-relaxed">
-                  Only the chief photographer has administrative access. Enter the private security code below to open the dashboard.
+                  Only the chief photographer has administrative access. Sign in with your admin account to open the dashboard.
                 </p>
               </div>
 
               <form onSubmit={handleLogin} className="space-y-4">
-                <div>
+                <div className="space-y-3">
+                  <input
+                    type="email"
+                    placeholder="Admin Email"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    className="w-full rounded-full border border-zinc-200 bg-white px-5 py-3.5 text-center text-xs tracking-widest outline-none focus:border-zinc-950 text-zinc-800 transition-colors font-mono shadow-sm"
+                    autoComplete="username"
+                    required
+                  />
                   <input
                     type="password"
-                    placeholder="Enter Security Code (Try 'admin')"
-                    value={passcode}
-                    onChange={(e) => setPasscode(e.target.value)}
-                    className="w-full rounded-full border border-zinc-200 bg-white px-5 py-3.5 text-center text-xs tracking-widest uppercase outline-none focus:border-zinc-950 text-zinc-800 transition-colors font-mono shadow-sm"
+                    placeholder="Password"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    className="w-full rounded-full border border-zinc-200 bg-white px-5 py-3.5 text-center text-xs tracking-widest outline-none focus:border-zinc-950 text-zinc-800 transition-colors font-mono shadow-sm"
+                    autoComplete="current-password"
                     required
                   />
                   {loginError && (
@@ -516,10 +543,10 @@ export default function AdminDashboard() {
 
                 <button
                   type="submit"
-                  className="w-full bg-zinc-950 text-white hover:bg-zinc-800 py-3.5 rounded-full text-[10px] font-bold tracking-widest uppercase transition-all shadow flex items-center justify-center gap-2"
+                  disabled={isLoggingIn}
+                  className="w-full bg-zinc-950 text-white hover:bg-zinc-800 py-3.5 rounded-full text-[10px] font-bold tracking-widest uppercase transition-all shadow flex items-center justify-center gap-2 disabled:opacity-60"
                 >
-                  Verify Credentials
-                  <ArrowRight className="h-3.5 w-3.5" />
+                  {isLoggingIn ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <>Verify Credentials <ArrowRight className="h-3.5 w-3.5" /></>}
                 </button>
               </form>
             </div>
